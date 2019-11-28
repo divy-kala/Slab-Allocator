@@ -21,6 +21,7 @@ struct mem_slab {
     int refcount;
     struct mem_bufctl * free_buffctls;
     void * mem;
+    int align;
     char * bitvec;
     // int max_relevant_bit = cache->objs_per_slab;
 
@@ -36,7 +37,8 @@ struct mem_cache {
 
 
     struct mem_slab * free_slabs; //first non-empty slab LL
-    struct mem_slab * slabs;    //doubly linked list of slabs /(not circ)
+    struct mem_slab * slabs; //doubly linked list of slabs /(not circ)
+    struct mem_slab * lastslab;    
 
     int lastalign;
 
