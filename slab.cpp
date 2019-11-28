@@ -21,7 +21,8 @@ struct mem_slab {
     int refcount;
     struct mem_bufctl * free_buffctls;
     void * mem;
-    int align;
+    unsigned int align;
+    unsigned int color;
     char * bitvec;
     // int max_relevant_bit = cache->objs_per_slab;
 
@@ -31,6 +32,7 @@ struct mem_cache {
     char * name;
     size_t objsize;
     unsigned int align;
+
     unsigned int objs_per_slab;
     void (*constructor)(void *, size_t);
     void (*destructor)(void *, size_t);
@@ -38,9 +40,9 @@ struct mem_cache {
 
     struct mem_slab * free_slabs; //first non-empty slab LL
     struct mem_slab * slabs; //doubly linked list of slabs /(not circ)
-    struct mem_slab * lastslab;    
+    struct mem_slab * lastslab;
 
-    int lastalign;
+    unsigned int lastcolor;
 
     unordered_map< void* , void*> btobctl;
     //create hash table
@@ -61,7 +63,21 @@ struct mem_cache *mem_cache_create (
         void (*destructor)(void *, size_t)
     ) {
 
+    struct mem_cache * cache = new mem_cache ();
+    cache->name = name;
+    cache->objsize = objsize;
+    cache->objs_per_slab = objs_per_slab;
+    cache->align = align;
+    cache->constructor = constructor;
+    cache->destructor = destructor;
+    cache->co
 
+
+
+
+
+
+    return cache;
 
 }
 
