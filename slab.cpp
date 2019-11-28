@@ -4,7 +4,7 @@
 #define GET_PAGESIZE() sysconf(_SC_PAGESIZE)
 using namespace std;
 
-enum BuffType { FREE, PARTIAL, FULL};
+enum SlabType { SMALL , LARGE};
 struct mem_slab;
 
 struct mem_bufctl {
@@ -12,7 +12,7 @@ struct mem_bufctl {
     struct mem_bufctl * prev_bufctl; //used in mem_cahce_destroy
     void * buff;
     struct mem_slab * parent_slab;
-    BuffType bufftype; //unused as of now
+
 };
 
 
@@ -21,7 +21,8 @@ struct mem_slab {
     int refcount;
     struct mem_bufctl * free_buffctls;
     void * mem;
-
+    char * bitvec;
+    // int max_relevant_bit = cache->objs_per_slab;
 
 };
 
@@ -42,6 +43,8 @@ struct mem_cache {
     unordered_map< void* , void*> btobctl;
     //create hash table
     //for small objects this hash gives the slab address
+
+    SlabType slabtype;
 
 
 
