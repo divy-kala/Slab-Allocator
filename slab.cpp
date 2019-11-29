@@ -5,6 +5,7 @@
 #include <sys/mman.h>
 #include <math.h>
 #include <cassert>
+#include <ctime>
 #define GET_PAGESIZE() sysconf(_SC_PAGESIZE)
 
 using namespace std;
@@ -21,6 +22,9 @@ struct testL {
 
 };
 
+struct smallobjs {
+    char ch[500];
+};
 
 enum SlabType { SMALL, LARGE};
 struct mem_slab;
@@ -573,7 +577,7 @@ void mem_cache_free ( struct mem_cache * cache, void * buff) {
     chars += byteno;
 
     char bit = 1 << (8-1-bitno);
-    assert (~(*chars) & bit );
+  //  assert (~(*chars) & bit );
 
     *chars ^= bit;
 
@@ -670,12 +674,28 @@ void ctrL (void * buff, size_t siz) {
 
 }
 
+
+
+void ctrsmallobj (void * buff, size_t siz) {
+    struct smallobjs **buff2 = (struct smallobjs**)buff;
+    *buff2 = (struct smallobjs *)malloc (siz) ;
+
+    char * x = (*buff2)->ch ;
+    for (int i = 0; i < 500; i ++ ) {
+
+        x[i] = 'a';
+    }
+
+}
+
 int main() {
 
-
+ //   const clock_t begin_time = clock();
+ //   std::cout << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000;
+/*
     struct mem_cache * cache = mem_cache_create( "scache", sizeof(struct test), 0, 0, &ctr, NULL);
     struct test * obj1 = (struct test *) mem_cache_alloc(cache);
-    cout << obj1->i << obj1->s << endl;
+    cout << endl << obj1->i << obj1->s << endl;
 
 
     struct mem_cache * cacheL = mem_cache_create( "lcache", sizeof(struct testL), 5, 0, &ctrL, NULL);
@@ -689,6 +709,45 @@ int main() {
     cout << cache->slabs->refcount;
     mem_cache_free (cache, obj1);
     cout << cache->slabs->refcount;
+
+    */
+    cout << "Slab allocation vs Malloc: Test1: allocating smallobjs. \nSize of smallobjs = " << sizeof(struct smallobjs) << " Bytes"
+        << "\nAllocations = 7" << endl;
+    struct mem_cache * cachesmall = mem_cache_create( "small", sizeof(struct smallobjs), 0, 0, &ctrsmallobj, NULL);
+
+    clock_t begin_time = clock();
+    struct smallobjs * objs_small[7];
+    for(int i = 0 ; i < 7 ; i++) {
+        objs_small[i] = (struct smallobjs *) mem_cache_alloc(cachesmall);
+    }
+    std::cout << "Slab allocation time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
+    /*
+    cout << "Just to demonstrate, here is the 4th slab allocated small object" << endl;
+    for (int i = 0; i < 1024; i ++ ) {
+       cout << objs_small[3]->ch[i];
+    }
+    cout << endl;*/
+
+    begin_time = clock();
+    struct smallobjs * x[8];
+    for(int i = 0 ; i < 7 ; i++) {
+        x[i] = (struct smallobjs * ) malloc(sizeof( struct smallobjs) );
+
+    }
+    std::cout << "Malloc allocation time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
+
+    begin_time = clock();
+    for(int i = 0 ; i < 7 ; i++) {
+        mem_cache_free( cachesmall, objs_small[i]);
+    }
+
+    std::cout << "Slab freeing time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
+
+    begin_time = clock();
+     for(int i = 0 ; i < 7 ; i++) {
+        delete x[i];
+    }
+    std::cout << "Malloc freeing time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
     return 0;
 }
 
