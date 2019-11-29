@@ -106,7 +106,7 @@ struct mem_slab * mem_allocate_small_slab ( unsigned int objsize,
 
 
     //initialize bitvec
-    unsigned int bytes_required = (int) ceil ( cache->objs_per_slab / 8 );
+    unsigned int bytes_required = (unsigned int) ceil ( cache->objs_per_slab / 8.0f );
     slab->bitvec = malloc (bytes_required);
     memset(slab->bitvec, 0, bytes_required);
 
@@ -286,38 +286,64 @@ void * mem_cache_alloc (struct mem_cache * cache) {
         newSlab->prev_slab=cache->lastslab;
         cache->lastslab=newSlab;
     }
+    if (cache->slabtype = LARGE) {
+        struct mem_slab *insertSlab=cache->free_slabs;
 
-    struct mem_slab *insertSlab=cache->free_slabs;
+        void * objAddr = insertSlab->free_buffctls->buff;
 
-    void * objAddr = insertSlab->free_buffctls->buff;
+        insertSlab->refcount++;
 
-    insertSlab->refcount++;
+        insertSlab->free_buffctls = insertSlab->free_buffctls->next_bufctl;
 
-    insertSlab->free_buffctls = insertSlab->free_buffctls->next_bufctl;
+        if(insertSlab->refcount == cache->objs_per_slab)
+        {
+            cache->free_slabs=cache->free_slabs->next_slab;
+        }
 
-    if(insertSlab->refcount == cache->objs_per_slab)
-    {
-        cache->free_slabs=cache->free_slabs->next_slab;
+        return objAddr;
     }
 
-    return objAddr;
 
+    // handling for small slabs
+    // get first free slab using bitvector
+    // go to free_slabs
+    // get free buff from first 0 bit in bitvec and set it to 1, don’t check more than
+    // cp->objs_per_slab 0s
+
+    struct mem_slab * freeslab = cache->free_slabs;
+    void * bitvec = freeslab->bitvec;
+    unsigned int bytes_required = (unsigned int) ceil ( cache->objs_per_slab / 8.0f );
+    unsigned int index = -1;
+    for (int i = 0; i < bytes_required; i++) {
+        char * chars = (char *) bitvec;
+        for (int j = 0; j <8;j++) {
+            if ( ~(*chars) &  (1<< (8-j-1) )) {
+                index = i*8 + j;
+                break;
+            }
+        }
+
+    }
+    if (index >= cache->objs_per_slab) {
+        index = -1;
+    }
+
+
+    // Do pointer manipulation to get the appropriate buff.
+    // inc refcount
+    void * buff = freeslab->mem + freeslab->color + index * cache->objsize;
+
+    freeslab->refcount++;
+
+
+    //if refcount == objs_per_slab update free_slabs
+    if (freeslab->refcount == cache->objs_per_slab) {
+        cache->free_slabs = cache->free_slabs->next_slab;
+
+    }
+
+    return buff;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 void mem_cache_free ( struct mem_cache * cache, void * buff) {
