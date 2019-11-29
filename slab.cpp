@@ -9,6 +9,19 @@
 
 using namespace std;
 
+struct test {
+    int i;
+    string s;
+
+};
+
+struct testL {
+    int i;
+    char s[1024];
+
+};
+
+
 enum SlabType { SMALL, LARGE};
 struct mem_slab;
 
@@ -95,16 +108,18 @@ struct mem_slab * mem_allocate_small_slab ( unsigned int objsize,
 
     //create dummy object
     void * dummy;
-    constructor(dummy, objsize);
+    (*constructor)(&dummy, objsize);
+    struct test * x = (struct test*) dummy;
 
     void * tmp = slab->mem + color;
     for ( unsigned int i = 0 ; i < cache->objs_per_slab; i++) {
         memcpy (tmp, dummy, objsize);
+
         tmp += objsize;
 
         cache->btoslab[tmp] = make_pair ( (struct mem_slab *)slabptr, i) ;
     }
-
+    delete dummy;
 
     //initialize bitvec
     unsigned int bytes_required = (unsigned int) ceil ( cache->objs_per_slab / 8.0f );
@@ -164,9 +179,10 @@ struct mem_slab* allocate_large_slab(
 
     temp = newSlab->free_buffctls; //DOUBT
 
+    void * dummy;
+    (*constructor)(&dummy, objsize);
+    struct test * x = (struct test*) dummy;
 
-    void *dummy;
-    constructor(dummy,objsize);
 
     for(int i=1;i<=obj_per_slab;i++)
     {
@@ -179,7 +195,7 @@ struct mem_slab* allocate_large_slab(
         temp=temp->next_bufctl;
         start=start+objsize;
     }
-
+    delete dummy;
     cache->slabtype=LARGE;
 
     //slabs
@@ -287,7 +303,7 @@ void * mem_cache_alloc (struct mem_cache * cache) {
         newSlab->prev_slab=cache->lastslab;
         cache->lastslab=newSlab;
     }
-    if (cache->slabtype = LARGE) {
+    if (cache->slabtype == LARGE) {
         struct mem_slab *insertSlab=cache->free_slabs;
 
         void * objAddr = insertSlab->free_buffctls->buff;
@@ -348,8 +364,191 @@ void * mem_cache_alloc (struct mem_cache * cache) {
 
 
 void mem_cache_free ( struct mem_cache * cache, void * buff) {
-    if (cache->slabtype == LARGE) {
 
+    if (cache->slabtype == LARGE)
+    {
+        struct mem_bufctl *buffctladdr=(struct mem_bufctl*)cache->btobctl[buff];
+        struct mem_slab *parentSlab=(struct mem_slab *)buffctladdr->parent_slab;
+
+        //###################################################################################################################
+        // 1 .remove bufctl and append to the end of bufctl list
+
+        struct mem_bufctl *temp=buffctladdr;
+
+        //slab is full
+        if(parentSlab->refcount == cache->objsize  && parentSlab->free_buffctls==NULL)
+        {
+            if(buffctladdr->prev_bufctl == NULL)        //first
+            {
+                //traverse till end
+
+                struct mem_bufctl *itr=temp;
+                while(itr->next_bufctl !=NULL)
+                {
+                    itr=itr->next_bufctl;
+                }
+                itr->next_bufctl=temp;
+                temp->prev_bufctl=itr;
+
+
+                temp->next_bufctl=NULL;
+                temp->next_bufctl->prev_bufctl = NULL;
+
+                parentSlab->free_buffctls=temp;
+
+            }
+            else if(buffctladdr->next_bufctl == NULL)
+            {
+                parentSlab->free_buffctls=temp;
+            }
+            else
+            {
+                //intermediate
+
+                struct mem_bufctl *itr=temp;
+                while(itr->next_bufctl !=NULL)
+                {
+                    itr=itr->next_bufctl;
+                }
+
+                //break all links
+                temp->next_bufctl->prev_bufctl=temp->prev_bufctl;
+                temp->prev_bufctl->next_bufctl=temp->next_bufctl;
+
+                temp->next_bufctl=NULL;
+                temp->prev_bufctl=NULL;
+
+                itr->next_bufctl=temp;
+                temp->prev_bufctl=itr;
+
+                temp->next_bufctl=NULL;
+                parentSlab->free_buffctls=temp;
+
+            }
+        }
+        else
+        {
+            //all bufctls are not fulled
+
+            //butctl->bufctl->bufctl->bufctl->bufctl
+            //                        freebufctl
+            if(buffctladdr->prev_bufctl == NULL)
+            {
+                //first
+                //traverse till end
+
+                struct mem_bufctl *itr=temp;
+                while(itr->next_bufctl !=NULL)
+                {
+                    itr=itr->next_bufctl;
+                }
+                itr->next_bufctl=temp;
+                temp->prev_bufctl=itr;
+
+
+                temp->next_bufctl=NULL;
+                temp->next_bufctl->prev_bufctl = NULL;
+
+            }
+            else
+            {
+                //intermediate
+
+                struct mem_bufctl *itr=temp;
+                while(itr->next_bufctl !=NULL)
+                {
+                    itr=itr->next_bufctl;
+                }
+
+                //break all links
+                temp->next_bufctl->prev_bufctl=temp->prev_bufctl;
+                temp->prev_bufctl->next_bufctl=temp->next_bufctl;
+
+                temp->next_bufctl=NULL;
+                temp->prev_bufctl=NULL;
+
+                itr->next_bufctl=temp;
+                temp->prev_bufctl=itr;
+
+                temp->next_bufctl=NULL;
+            }
+        }
+
+        //######################################################################################################################
+
+        //2.update refcount
+
+        parentSlab->refcount=parentSlab->refcount-1;
+
+        //3. Attach parentSlab to end if refcount == 0 and to prev of free_slabs if refcount < no_of_objects && refcount !=0
+
+        if(parentSlab->refcount == 0)
+        {
+            if(parentSlab->prev_slab==NULL)
+            {
+                //head
+
+                parentSlab->next_slab->prev_slab=NULL;
+                parentSlab->next_slab=NULL;
+
+                cache->lastslab->next_slab=parentSlab;
+                parentSlab->prev_slab=cache->lastslab;
+
+                cache->lastslab=cache->lastslab->next_slab;
+            }
+            else
+            {
+                //intermediate
+                parentSlab->next_slab->prev_slab=parentSlab->prev_slab;
+                parentSlab->prev_slab->next_slab=parentSlab->next_slab;
+
+                cache->lastslab->next_slab=parentSlab;
+                parentSlab->prev_slab=cache->lastslab;
+
+                cache->lastslab=cache->lastslab->next_slab;
+            }
+
+
+        }
+        else if(parentSlab->refcount < cache->objs_per_slab && parentSlab->refcount !=0)
+        {
+
+            if(parentSlab->prev_slab==NULL)
+            {
+                //head
+
+                parentSlab->next_slab->prev_slab=NULL;
+                parentSlab->next_slab=NULL;
+
+                parentSlab->prev_slab=cache->free_slabs->prev_slab;
+                parentSlab->prev_slab->next_slab=parentSlab;
+
+                cache->free_slabs->prev_slab=parentSlab;
+                parentSlab->next_slab=cache->free_slabs;
+
+                cache->free_slabs->prev_slab=parentSlab;
+
+                cache->free_slabs=cache->free_slabs->prev_slab;
+
+            }
+            else
+            {
+                //intermediate
+
+                parentSlab->next_slab->prev_slab=parentSlab->prev_slab;
+                parentSlab->prev_slab->next_slab=parentSlab->next_slab;
+
+                parentSlab->prev_slab=cache->free_slabs->prev_slab;
+                parentSlab->prev_slab->next_slab=parentSlab;
+
+                cache->free_slabs->prev_slab=parentSlab;
+                parentSlab->next_slab=cache->free_slabs;
+
+                cache->free_slabs->prev_slab=parentSlab;
+
+                cache->free_slabs=cache->free_slabs->prev_slab;
+            }
+        }
     }
 
 
@@ -437,8 +636,50 @@ void mem_cache_destroy (struct mem_cache * cache) {
 }
 
 
+void ctr (void * buff, size_t siz) {
+    struct test **buff2 = (struct test**)buff;
+    *buff2 = (struct test *)malloc (siz) ;
+    //struct test * testobj = (struct test *) buff;
+    //testobj->i = 5;
+    //testobj->s = " Hello World ";
+
+    (*buff2)->i=5;
+    (*buff2)->s="jatin";
+
+}
+
+void ctrL (void * buff, size_t siz) {
+    struct testL **buff2 = (struct testL**)buff;
+    *buff2 = (struct testL *)malloc (siz) ;
+    //struct test * testobj = (struct test *) buff;
+    //testobj->i = 5;
+    //testobj->s = " Hello World ";
+
+    (*buff2)->i=10;
+    //(*buff2)->s="DIVY";
+    char * x = (*buff2)->s ;
+    for (int i = 0; i < 1024; i ++ ) {
+
+        x[i] = 'a';
+    }
+
+}
+
 int main() {
-    cout << GET_PAGESIZE() << endl;
+
+
+    struct mem_cache * cache = mem_cache_create( "scache", sizeof(struct test), 5, 0, &ctr, NULL);
+    struct test * obj1 = (struct test *) mem_cache_alloc(cache);
+    cout << obj1->i << obj1->s << endl;
+
+
+    struct mem_cache * cacheL = mem_cache_create( "lcache", sizeof(struct testL), 5, 0, &ctrL, NULL);
+    struct testL * obj2 = (struct testL *) mem_cache_alloc(cacheL);
+    cout << obj2->i << endl;
+
+    for (int i = 0; i < 1024; i ++ ) {
+       cout << obj2->s[i];
+    }
     return 0;
 }
 
