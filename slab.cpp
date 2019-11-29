@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <math.h>
+#include <cassert>
 #define GET_PAGESIZE() sysconf(_SC_PAGESIZE)
 
 using namespace std;
@@ -347,6 +348,36 @@ void * mem_cache_alloc (struct mem_cache * cache) {
 
 
 void mem_cache_free ( struct mem_cache * cache, void * buff) {
+    if (cache->slabtype == LARGE) {
+
+    }
+
+
+    /*
+    • If small obj, get slab, buffindex from hash
+        ◦ goto slab->bitvec[buffindex] = 0
+    • update refcount
+    */
+
+    struct mem_slab * slab = cache->btoslab[buff].first ;
+    unsigned int buffindex = cache->btoslab[buff].second;
+
+    unsigned int byteno = buffindex / 8;
+    unsigned int bitno = buffindex % 8;
+
+    char * chars = (char * ) slab->bitvec;
+    chars += byteno;
+
+    char bit = 1 << (8-1-bitno);
+    assert (~(*chars) & bit );
+
+    *chars ^= bit;
+
+    slab->refcount--;
+
+
+    //When a slab ref count becomes 0, move it to the end of slab list in the cache
+
 
 
 }
@@ -355,13 +386,6 @@ void mem_cache_destroy (struct mem_cache * cache) {
 //TODO: remember to munmap!
 }
 
-void mem_cache_grow (struct mem_cache * cache) {
-
-}
-
-void mem_cache_reap (struct mem_cache * cache) {
-
-}
 
 int main() {
     cout << GET_PAGESIZE() << endl;
