@@ -5,6 +5,7 @@
 #include <sys/mman.h>
 #include <math.h>
 #define GET_PAGESIZE() sysconf(_SC_PAGESIZE)
+
 using namespace std;
 
 enum SlabType { SMALL, LARGE};
@@ -117,6 +118,91 @@ struct mem_slab * mem_allocate_small_slab ( unsigned int objsize,
 
 }
 
+struct mem_slab* allocate_large_slab(
+    size_t objsize,
+    unsigned int obj_per_slab,
+    struct mem_cache* cache,
+    unsigned int color,
+    unsigned int align,
+    void (*constructor)(void *,size_t)
+)
+{
+    struct mem_slab *newSlab=(struct mem_slab *)malloc(sizeof(mem_slab));
+    newSlab->refcount=0;
+
+    //create list of buffctls as DLL
+
+    struct mem_bufctl *buffListHead=(struct mem_bufctl*)malloc(sizeof(mem_bufctl));
+    buffListHead->next_bufctl=NULL;
+    buffListHead->prev_bufctl=NULL;
+    buffListHead->parent_slab=newSlab;
+
+    //nothing but insert at end of DLL everytime
+    struct mem_bufctl* temp=buffListHead;
+
+    for(int i=0;i<obj_per_slab-1;i++)
+    {
+        struct mem_bufctl *newBuff=(struct mem_bufctl*)malloc(sizeof(mem_bufctl));
+        temp->next_bufctl=newBuff;
+        newBuff->prev_bufctl=temp;
+        newBuff->next_bufctl=NULL;
+        temp->parent_slab=newSlab;
+        temp=newBuff;
+    }
+
+    newSlab->free_buffctls=buffListHead;
+
+    //memory
+
+    int SIZE=obj_per_slab * objsize;
+    newSlab->mem=mmap(NULL,SIZE,PROT_READ | PROT_WRITE,MAP_PRIVATE | MAP_ANONYMOUS,-1,0);
+
+    //skip color bytes and start constructing objects from newSlab->mem+color
+
+    void *start=newSlab->mem+color;
+
+    temp = newSlab->free_buffctls; //DOUBT
+
+
+    void *dummy;
+    constructor(dummy,objsize);
+
+    for(int i=1;i<=obj_per_slab;i++)
+    {
+        memcpy(start,dummy,objsize);
+        temp->buff=start;
+        //buffer address is start
+        //its bufctl address is temp
+        cache->btobctl[start]=temp;
+
+        temp=temp->next_bufctl;
+        start=start+objsize;
+    }
+
+    cache->slabtype=LARGE;
+
+    //slabs
+    //free_slabs
+    //last_slab
+
+    if(cache->slabs==NULL)
+    {
+        cache->slabs=newSlab;
+        cache->free_slabs=newSlab;
+        cache->lastslab=newSlab;
+        newSlab->prev_slab=NULL;
+    }
+    else
+    {
+        cache->lastslab->next_slab=newSlab;
+        newSlab->prev_slab=cache->lastslab;
+        cache->lastslab=newSlab;
+        cache->free_slabs=newSlab;
+
+    }
+
+    return newSlab;
+}
 
 
 
@@ -149,6 +235,8 @@ struct mem_cache *mem_cache_create (
         cache->slabtype = LARGE;
         //If large, create large slab, update slabtype
 
+        newslab = allocate_large_slab(objsize,objs_per_slab,cache,cache->lastcolor,0,constructor);
+
     } else {
 
 
@@ -167,9 +255,11 @@ struct mem_cache *mem_cache_create (
 
     //initialize free_slabs and slabs, lastcolor
     cache->free_slabs = cache->slabs = cache->lastslab = newslab;
-    unsigned int lastcolor;
-    lastcolor = (lastcolor + 8) % 32;
-    cache->lastcolor = lastcolor;
+
+
+    //unsigned int lastcolor;
+    //lastcolor = (lastcolor + 8) % 32;
+    //cache->lastcolor = lastcolor;
 
 
     return cache;
@@ -177,11 +267,58 @@ struct mem_cache *mem_cache_create (
 }
 
 
-//flags not supported by mmap
 void * mem_cache_alloc (struct mem_cache * cache) {
 
+    if(cache->free_slabs==NULL)
+    {
+        cache->lastcolor=(cache->lastcolor+8)%32;
+
+        struct mem_slab* newSlab;
+        if (cache->slabtype == LARGE) {
+            newSlab = allocate_large_slab(cache->objsize,cache->objs_per_slab,cache,cache->lastcolor,0,cache->constructor);
+        }
+        else if (cache->slabtype == SMALL) {
+            newSlab = mem_allocate_small_slab ( cache->objsize, cache->align, cache->lastcolor, cache->objs_per_slab, cache->constructor, cache);
+        }
+
+
+        cache->free_slabs=newSlab;
+        newSlab->prev_slab=cache->lastslab;
+        cache->lastslab=newSlab;
+    }
+
+    struct mem_slab *insertSlab=cache->free_slabs;
+
+    void * objAddr = insertSlab->free_buffctls->buff;
+
+    insertSlab->refcount++;
+
+    insertSlab->free_buffctls = insertSlab->free_buffctls->next_bufctl;
+
+    if(insertSlab->refcount == cache->objs_per_slab)
+    {
+        cache->free_slabs=cache->free_slabs->next_slab;
+    }
+
+    return objAddr;
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 void mem_cache_free ( struct mem_cache * cache, void * buff) {
 
