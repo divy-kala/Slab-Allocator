@@ -97,7 +97,7 @@ struct mem_slab * mem_allocate_small_slab ( unsigned int objsize,
 
 
     //mmap objsize bytes, aligned 0 (defaults to “get a page”) store in mem ptr
-    slab->mem = mmap(NULL, objsize , PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    slab->mem = mmap(NULL, objsize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
     //jump to mem + pagesize – sizeof(mem_slab)  (maybe create an inline func to get this)
     void * slabptrvoid = slab->mem + pagesize + slab->color - sizeof(mem_slab);
@@ -147,8 +147,7 @@ struct mem_slab* allocate_large_slab(
     unsigned int color,
     unsigned int align,
     void (*constructor)(void *,size_t)
-)
-{
+) {
     struct mem_slab *newSlab=(struct mem_slab *)malloc(sizeof(mem_slab));
     newSlab->refcount=0;
 
@@ -162,8 +161,7 @@ struct mem_slab* allocate_large_slab(
     //nothing but insert at end of DLL everytime
     struct mem_bufctl* temp=buffListHead;
 
-    for(int i=0;i<obj_per_slab-1;i++)
-    {
+    for(int i=0; i<obj_per_slab-1; i++) {
         struct mem_bufctl *newBuff=(struct mem_bufctl*)malloc(sizeof(mem_bufctl));
         temp->next_bufctl=newBuff;
         newBuff->prev_bufctl=temp;
@@ -190,8 +188,7 @@ struct mem_slab* allocate_large_slab(
     struct test * x = (struct test*) dummy;
 
 
-    for(int i=1;i<=obj_per_slab;i++)
-    {
+    for(int i=1; i<=obj_per_slab; i++) {
         memcpy(start,dummy,objsize);
         temp->buff=start;
         //buffer address is start
@@ -208,15 +205,12 @@ struct mem_slab* allocate_large_slab(
     //free_slabs
     //last_slab
 
-    if(cache->slabs==NULL)
-    {
+    if(cache->slabs==NULL) {
         cache->slabs=newSlab;
         cache->free_slabs=newSlab;
         cache->lastslab=newSlab;
         newSlab->prev_slab=NULL;
-    }
-    else
-    {
+    } else {
         cache->lastslab->next_slab=newSlab;
         newSlab->prev_slab=cache->lastslab;
         cache->lastslab=newSlab;
@@ -292,15 +286,13 @@ struct mem_cache *mem_cache_create (
 
 void * mem_cache_alloc (struct mem_cache * cache) {
 
-    if(cache->free_slabs==NULL)
-    {
+    if(cache->free_slabs==NULL) {
         cache->lastcolor=(cache->lastcolor+8)%32;
 
         struct mem_slab* newSlab;
         if (cache->slabtype == LARGE) {
             newSlab = allocate_large_slab(cache->objsize,cache->objs_per_slab,cache,cache->lastcolor,0,cache->constructor);
-        }
-        else if (cache->slabtype == SMALL) {
+        } else if (cache->slabtype == SMALL) {
             newSlab = mem_allocate_small_slab ( cache->objsize, cache->align, cache->lastcolor, cache->objs_per_slab, cache->constructor, cache);
         }
 
@@ -318,8 +310,7 @@ void * mem_cache_alloc (struct mem_cache * cache) {
 
         insertSlab->free_buffctls = insertSlab->free_buffctls->next_bufctl;
 
-        if(insertSlab->refcount == cache->objs_per_slab)
-        {
+        if(insertSlab->refcount == cache->objs_per_slab) {
             cache->free_slabs=cache->free_slabs->next_slab;
         }
 
@@ -340,7 +331,7 @@ void * mem_cache_alloc (struct mem_cache * cache) {
     char * chars = (char *) bitvec;
     for (int i = 0; i < bytes_required; i++) {
 
-        for (int j = 0; j <8;j++) {
+        for (int j = 0; j <8; j++) {
             if ( ~(*chars) &  (1<< (8-j-1) )) {
                 index = i*8 + j;
                 goto break2;
@@ -348,7 +339,7 @@ void * mem_cache_alloc (struct mem_cache * cache) {
         }
         chars += 1;
     }
-    break2:
+break2:
     if (index >= cache->objs_per_slab) {
         index = -1;
     }
@@ -373,8 +364,7 @@ void * mem_cache_alloc (struct mem_cache * cache) {
 
 void mem_cache_free ( struct mem_cache * cache, void * buff) {
 
-    if (cache->slabtype == LARGE)
-    {
+    if (cache->slabtype == LARGE) {
         struct mem_bufctl *buffctladdr=(struct mem_bufctl*)cache->btobctl[buff];
         struct mem_slab *parentSlab=(struct mem_slab *)buffctladdr->parent_slab;
 
@@ -384,15 +374,12 @@ void mem_cache_free ( struct mem_cache * cache, void * buff) {
         struct mem_bufctl *temp=buffctladdr;
 
         //slab is full
-        if(parentSlab->refcount == cache->objsize  && parentSlab->free_buffctls==NULL)
-        {
-            if(buffctladdr->prev_bufctl == NULL)        //first
-            {
+        if(parentSlab->refcount == cache->objsize  && parentSlab->free_buffctls==NULL) {
+            if(buffctladdr->prev_bufctl == NULL) {      //first
                 //traverse till end
 
                 struct mem_bufctl *itr=temp;
-                while(itr->next_bufctl !=NULL)
-                {
+                while(itr->next_bufctl !=NULL) {
                     itr=itr->next_bufctl;
                 }
                 itr->next_bufctl=temp;
@@ -404,18 +391,13 @@ void mem_cache_free ( struct mem_cache * cache, void * buff) {
 
                 parentSlab->free_buffctls=temp;
 
-            }
-            else if(buffctladdr->next_bufctl == NULL)
-            {
+            } else if(buffctladdr->next_bufctl == NULL) {
                 parentSlab->free_buffctls=temp;
-            }
-            else
-            {
+            } else {
                 //intermediate
 
                 struct mem_bufctl *itr=temp;
-                while(itr->next_bufctl !=NULL)
-                {
+                while(itr->next_bufctl !=NULL) {
                     itr=itr->next_bufctl;
                 }
 
@@ -433,21 +415,17 @@ void mem_cache_free ( struct mem_cache * cache, void * buff) {
                 parentSlab->free_buffctls=temp;
 
             }
-        }
-        else
-        {
+        } else {
             //all bufctls are not fulled
 
             //butctl->bufctl->bufctl->bufctl->bufctl
             //                        freebufctl
-            if(buffctladdr->prev_bufctl == NULL)
-            {
+            if(buffctladdr->prev_bufctl == NULL) {
                 //first
                 //traverse till end
 
                 struct mem_bufctl *itr=temp;
-                while(itr->next_bufctl !=NULL)
-                {
+                while(itr->next_bufctl !=NULL) {
                     itr=itr->next_bufctl;
                 }
                 itr->next_bufctl=temp;
@@ -457,14 +435,11 @@ void mem_cache_free ( struct mem_cache * cache, void * buff) {
                 temp->next_bufctl=NULL;
                 temp->next_bufctl->prev_bufctl = NULL;
 
-            }
-            else
-            {
+            } else {
                 //intermediate
 
                 struct mem_bufctl *itr=temp;
-                while(itr->next_bufctl !=NULL)
-                {
+                while(itr->next_bufctl !=NULL) {
                     itr=itr->next_bufctl;
                 }
 
@@ -490,10 +465,8 @@ void mem_cache_free ( struct mem_cache * cache, void * buff) {
 
         //3. Attach parentSlab to end if refcount == 0 and to prev of free_slabs if refcount < no_of_objects && refcount !=0
 
-        if(parentSlab->refcount == 0)
-        {
-            if(parentSlab->prev_slab==NULL)
-            {
+        if(parentSlab->refcount == 0) {
+            if(parentSlab->prev_slab==NULL) {
                 //head
 
                 parentSlab->next_slab->prev_slab=NULL;
@@ -503,9 +476,7 @@ void mem_cache_free ( struct mem_cache * cache, void * buff) {
                 parentSlab->prev_slab=cache->lastslab;
 
                 cache->lastslab=cache->lastslab->next_slab;
-            }
-            else
-            {
+            } else {
                 //intermediate
                 parentSlab->next_slab->prev_slab=parentSlab->prev_slab;
                 parentSlab->prev_slab->next_slab=parentSlab->next_slab;
@@ -517,12 +488,9 @@ void mem_cache_free ( struct mem_cache * cache, void * buff) {
             }
 
 
-        }
-        else if(parentSlab->refcount < cache->objs_per_slab && parentSlab->refcount !=0)
-        {
+        } else if(parentSlab->refcount < cache->objs_per_slab && parentSlab->refcount !=0) {
 
-            if(parentSlab->prev_slab==NULL)
-            {
+            if(parentSlab->prev_slab==NULL) {
                 //head
 
                 parentSlab->next_slab->prev_slab=NULL;
@@ -538,9 +506,7 @@ void mem_cache_free ( struct mem_cache * cache, void * buff) {
 
                 cache->free_slabs=cache->free_slabs->prev_slab;
 
-            }
-            else
-            {
+            } else {
                 //intermediate
 
                 parentSlab->next_slab->prev_slab=parentSlab->prev_slab;
@@ -577,7 +543,7 @@ void mem_cache_free ( struct mem_cache * cache, void * buff) {
     chars += byteno;
 
     char bit = 1 << (8-1-bitno);
-  //  assert (~(*chars) & bit );
+    //  assert (~(*chars) & bit );
 
     *chars ^= bit;
 
@@ -595,7 +561,7 @@ void mem_cache_destroy (struct mem_cache * cache) {
 
     struct mem_slab * slab = cache->slabs;
     if (cache->slabtype == LARGE) {
-    //for large slabs
+        //for large slabs
         while (slab != NULL) {
 
             munmap (slab->mem, cache->objs_per_slab * cache->objsize + slab->color);
@@ -623,9 +589,8 @@ void mem_cache_destroy (struct mem_cache * cache) {
             slab = slab->next_slab;
             delete pslab;
         }
-    }
-    else if ( cache->slabtype == SMALL) {
-    //for small slabs
+    } else if ( cache->slabtype == SMALL) {
+        //for small slabs
         while (slab != NULL) {
             delete slab->bitvec;
 
@@ -690,64 +655,118 @@ void ctrsmallobj (void * buff, size_t siz) {
 
 int main() {
 
- //   const clock_t begin_time = clock();
- //   std::cout << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000;
-/*
-    struct mem_cache * cache = mem_cache_create( "scache", sizeof(struct test), 0, 0, &ctr, NULL);
-    struct test * obj1 = (struct test *) mem_cache_alloc(cache);
-    cout << endl << obj1->i << obj1->s << endl;
-
-
-    struct mem_cache * cacheL = mem_cache_create( "lcache", sizeof(struct testL), 5, 0, &ctrL, NULL);
-    struct testL * obj2 = (struct testL *) mem_cache_alloc(cacheL);
-    cout << obj2->i << endl;
-
-    for (int i = 0; i < 1024; i ++ ) {
-       cout << obj2->s[i];
-    }
-    cout << endl;
-    cout << cache->slabs->refcount;
-    mem_cache_free (cache, obj1);
-    cout << cache->slabs->refcount;
-
-    */
-    cout << "Slab allocation vs Malloc: Test1: allocating smallobjs. \nSize of smallobjs = " << sizeof(struct smallobjs) << " Bytes"
-        << "\nAllocations = 7" << endl;
-    struct mem_cache * cachesmall = mem_cache_create( "small", sizeof(struct smallobjs), 0, 0, &ctrsmallobj, NULL);
-
-    clock_t begin_time = clock();
-    struct smallobjs * objs_small[7];
-    for(int i = 0 ; i < 7 ; i++) {
-        objs_small[i] = (struct smallobjs *) mem_cache_alloc(cachesmall);
-    }
-    std::cout << "Slab allocation time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
+//   const clock_t begin_time = clock();
+//   std::cout << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000;
     /*
-    cout << "Just to demonstrate, here is the 4th slab allocated small object" << endl;
-    for (int i = 0; i < 1024; i ++ ) {
-       cout << objs_small[3]->ch[i];
+        struct mem_cache * cache = mem_cache_create( "scache", sizeof(struct test), 0, 0, &ctr, NULL);
+        struct test * obj1 = (struct test *) mem_cache_alloc(cache);
+        cout << endl << obj1->i << obj1->s << endl;
+
+
+        struct mem_cache * cacheL = mem_cache_create( "lcache", sizeof(struct testL), 5, 0, &ctrL, NULL);
+        struct testL * obj2 = (struct testL *) mem_cache_alloc(cacheL);
+        cout << obj2->i << endl;
+
+        for (int i = 0; i < 1024; i ++ ) {
+           cout << obj2->s[i];
+        }
+        cout << endl;
+        cout << cache->slabs->refcount;
+        mem_cache_free (cache, obj1);
+        cout << cache->slabs->refcount;
+
+        */
+    clock_t begin_time = clock();
+
+    {
+        cout << "Slab allocation vs Malloc: Test1: allocating smallobjs. \nSize of smallobjs = " << sizeof(struct smallobjs) << " Bytes"
+             << "\nAllocations = 7" << endl;
+        struct mem_cache * cachesmall = mem_cache_create( "small", sizeof(struct smallobjs), 0, 0, &ctrsmallobj, NULL);
+
+
+        struct smallobjs * objs_small[7];
+        for(int i = 0 ; i < 7 ; i++) {
+            objs_small[i] = (struct smallobjs *) mem_cache_alloc(cachesmall);
+        }
+        std::cout << "Slab allocation time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
+        /*
+        cout << "Just to demonstrate, here is the 4th slab allocated small object" << endl;
+        for (int i = 0; i < 1024; i ++ ) {
+           cout << objs_small[3]->ch[i];
+        }
+        cout << endl;*/
+
+        begin_time = clock();
+        struct smallobjs * x[8];
+        for(int i = 0 ; i < 7 ; i++) {
+            x[i] = (struct smallobjs * ) malloc(sizeof( struct smallobjs) );
+
+        }
+        std::cout << "Malloc allocation time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
+
+        begin_time = clock();
+        for(int i = 0 ; i < 7 ; i++) {
+            mem_cache_free( cachesmall, objs_small[i]);
+        }
+
+        std::cout << "Slab freeing time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
+
+        begin_time = clock();
+        for(int i = 0 ; i < 7 ; i++) {
+            delete x[i];
+        }
+        std::cout << "Malloc freeing time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
     }
-    cout << endl;*/
+    cout << "Press any key to continue" << endl;
+    int input;
+    cin >> input;
+    cout << endl << endl << endl << endl;
 
-    begin_time = clock();
-    struct smallobjs * x[8];
-    for(int i = 0 ; i < 7 ; i++) {
-        x[i] = (struct smallobjs * ) malloc(sizeof( struct smallobjs) );
+    {
+        cout << "Slab allocation vs Malloc: Test2: allocating smallobjs. \nSize of smallobjs = " << sizeof(struct smallobjs) << " Bytes"
+             << "\nAllocations = 7" << endl;
+        struct mem_cache * cachesmall = mem_cache_create( "small", sizeof(struct smallobjs), 0, 0, &ctrsmallobj, NULL);
+
+
+        struct smallobjs * objs_small[7];
+        for(int i = 0 ; i < 7 ; i++) {
+            objs_small[i] = (struct smallobjs *) mem_cache_alloc(cachesmall);
+        }
+        std::cout << "Slab allocation time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
+        /*
+        cout << "Just to demonstrate, here is the 4th slab allocated small object" << endl;
+        for (int i = 0; i < 1024; i ++ ) {
+           cout << objs_small[3]->ch[i];
+        }
+        cout << endl;*/
+
+        begin_time = clock();
+        struct smallobjs * x[8];
+        for(int i = 0 ; i < 7 ; i++) {
+            x[i] = (struct smallobjs * ) malloc(sizeof( struct smallobjs) );
+
+        }
+        std::cout << "Malloc allocation time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
+
+        begin_time = clock();
+        for(int i = 0 ; i < 7 ; i++) {
+            mem_cache_free( cachesmall, objs_small[i]);
+        }
+
+        std::cout << "Slab freeing time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
+
+        begin_time = clock();
+        for(int i = 0 ; i < 7 ; i++) {
+            delete x[i];
+        }
+        std::cout << "Malloc freeing time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
+
+
 
     }
-    std::cout << "Malloc allocation time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
 
-    begin_time = clock();
-    for(int i = 0 ; i < 7 ; i++) {
-        mem_cache_free( cachesmall, objs_small[i]);
-    }
 
-    std::cout << "Slab freeing time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
 
-    begin_time = clock();
-     for(int i = 0 ; i < 7 ; i++) {
-        delete x[i];
-    }
-    std::cout << "Malloc freeing time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
     return 0;
 }
 
