@@ -155,7 +155,7 @@ struct mem_slab* allocate_large_slab(
 
     //memory
 
-    int SIZE=obj_per_slab * objsize;
+    int SIZE = color + obj_per_slab * objsize;
     newSlab->mem=mmap(NULL,SIZE,PROT_READ | PROT_WRITE,MAP_PRIVATE | MAP_ANONYMOUS,-1,0);
 
     //skip color bytes and start constructing objects from newSlab->mem+color
@@ -383,7 +383,57 @@ void mem_cache_free ( struct mem_cache * cache, void * buff) {
 }
 
 void mem_cache_destroy (struct mem_cache * cache) {
-//TODO: remember to munmap!
+    //Iterate over slabs
+
+    struct mem_slab * slab = cache->slabs;
+    if (cache->slabtype == LARGE) {
+    //for large slabs
+        while (slab != NULL) {
+
+            munmap (slab->mem, cache->objs_per_slab * cache->objsize + slab->color);
+
+            struct mem_bufctl * tbuf = slab->free_buffctls;
+            struct mem_bufctl * tbufprev = tbuf->prev_bufctl;
+
+            //free right bufctls
+            while (tbuf != NULL) {
+                struct mem_bufctl * tmp = tbuf;
+                tbuf = tbuf->next_bufctl;
+                delete tmp;
+            }
+
+            //free left bufctls
+            while (tbufprev != NULL) {
+                struct mem_bufctl * tmp = tbufprev;
+                tbufprev = tbufprev->prev_bufctl;
+                delete tmp;
+            }
+
+
+            //move to next slab and delete current slab
+            struct mem_slab * pslab = slab;
+            slab = slab->next_slab;
+            delete pslab;
+        }
+    }
+    else if ( cache->slabtype == SMALL) {
+    //for small slabs
+        while (slab != NULL) {
+            delete slab->bitvec;
+
+            struct mem_slab * pslab = slab;
+            slab = slab->next_slab;
+
+            munmap (pslab->mem, cache->objsize);
+
+
+        }
+
+    }
+
+
+    delete cache;
+
 }
 
 
