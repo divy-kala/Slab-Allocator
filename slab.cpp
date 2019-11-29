@@ -96,10 +96,11 @@ struct mem_slab * mem_allocate_small_slab ( unsigned int objsize,
     slab->mem = mmap(NULL, objsize , PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
     //jump to mem + pagesize – sizeof(mem_slab)  (maybe create an inline func to get this)
-    void * slabptr = slab->mem + pagesize + slab->color - sizeof(mem_slab);
-    memcpy(slabptr, slab, sizeof(struct mem_slab) );
+    void * slabptrvoid = slab->mem + pagesize + slab->color - sizeof(mem_slab);
+    memcpy(slabptrvoid, slab, sizeof(struct mem_slab) );
 
-
+    delete slab;
+    struct mem_slab * slabptr = (struct mem_slab *) slabptrvoid;
     //cache->objs_per_slab = (int) floor  [ ( pagesize – sizeof(mem_slab) – color ) / objsize ]
     cache->objs_per_slab =  (pagesize - sizeof(mem_slab) - color )/ objsize ;
 
@@ -111,23 +112,24 @@ struct mem_slab * mem_allocate_small_slab ( unsigned int objsize,
     (*constructor)(&dummy, objsize);
     struct test * x = (struct test*) dummy;
 
-    void * tmp = slab->mem + color;
+    void * tmp = slabptr->mem + color;
     for ( unsigned int i = 0 ; i < cache->objs_per_slab; i++) {
         memcpy (tmp, dummy, objsize);
 
-        tmp += objsize;
+
 
         cache->btoslab[tmp] = make_pair ( (struct mem_slab *)slabptr, i) ;
+        tmp += objsize;
     }
     delete dummy;
 
     //initialize bitvec
     unsigned int bytes_required = (unsigned int) ceil ( cache->objs_per_slab / 8.0f );
-    slab->bitvec = malloc (bytes_required);
-    memset(slab->bitvec, 0, bytes_required);
+    slabptr->bitvec = malloc (bytes_required);
+    memset(slabptr->bitvec, 0, bytes_required);
 
 
-    return slab;
+    return slabptr;
 
 
 
@@ -331,16 +333,18 @@ void * mem_cache_alloc (struct mem_cache * cache) {
     void * bitvec = freeslab->bitvec;
     unsigned int bytes_required = (unsigned int) ceil ( cache->objs_per_slab / 8.0f );
     unsigned int index = -1;
+    char * chars = (char *) bitvec;
     for (int i = 0; i < bytes_required; i++) {
-        char * chars = (char *) bitvec;
+
         for (int j = 0; j <8;j++) {
             if ( ~(*chars) &  (1<< (8-j-1) )) {
                 index = i*8 + j;
-                break;
+                goto break2;
             }
         }
-
+        chars += 1;
     }
+    break2:
     if (index >= cache->objs_per_slab) {
         index = -1;
     }
@@ -549,6 +553,7 @@ void mem_cache_free ( struct mem_cache * cache, void * buff) {
                 cache->free_slabs=cache->free_slabs->prev_slab;
             }
         }
+        return;
     }
 
 
@@ -668,7 +673,7 @@ void ctrL (void * buff, size_t siz) {
 int main() {
 
 
-    struct mem_cache * cache = mem_cache_create( "scache", sizeof(struct test), 5, 0, &ctr, NULL);
+    struct mem_cache * cache = mem_cache_create( "scache", sizeof(struct test), 0, 0, &ctr, NULL);
     struct test * obj1 = (struct test *) mem_cache_alloc(cache);
     cout << obj1->i << obj1->s << endl;
 
@@ -680,6 +685,10 @@ int main() {
     for (int i = 0; i < 1024; i ++ ) {
        cout << obj2->s[i];
     }
+    cout << endl;
+    cout << cache->slabs->refcount;
+    mem_cache_free (cache, obj1);
+    cout << cache->slabs->refcount;
     return 0;
 }
 
