@@ -23,7 +23,7 @@ struct testL {
 };
 
 struct smallobjs {
-    char ch[500];
+    char ch[400];
 };
 
 enum SlabType { SMALL, LARGE};
@@ -114,7 +114,7 @@ struct mem_slab * mem_allocate_small_slab ( unsigned int objsize,
     //create dummy object
     void * dummy;
     (*constructor)(&dummy, objsize);
-    struct test * x = (struct test*) dummy;
+
 
     void * tmp = slabptr->mem + color;
     for ( unsigned int i = 0 ; i < cache->objs_per_slab; i++) {
@@ -334,6 +334,10 @@ void * mem_cache_alloc (struct mem_cache * cache) {
         for (int j = 0; j <8; j++) {
             if ( ~(*chars) &  (1<< (8-j-1) )) {
                 index = i*8 + j;
+
+                char bit = (1<< (8-j-1) );
+                *chars |= bit;
+
                 goto break2;
             }
         }
@@ -543,7 +547,7 @@ void mem_cache_free ( struct mem_cache * cache, void * buff) {
     chars += byteno;
 
     char bit = 1 << (8-1-bitno);
-    //  assert (~(*chars) & bit );
+    assert ( (*chars) & bit );
 
     *chars ^= bit;
 
@@ -646,7 +650,7 @@ void ctrsmallobj (void * buff, size_t siz) {
     *buff2 = (struct smallobjs *)malloc (siz) ;
 
     char * x = (*buff2)->ch ;
-    for (int i = 0; i < 500; i ++ ) {
+    for (int i = 0; i < 400; i ++ ) {
 
         x[i] = 'a';
     }
@@ -655,31 +659,11 @@ void ctrsmallobj (void * buff, size_t siz) {
 
 int main() {
 
-//   const clock_t begin_time = clock();
-//   std::cout << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000;
-    /*
-        struct mem_cache * cache = mem_cache_create( "scache", sizeof(struct test), 0, 0, &ctr, NULL);
-        struct test * obj1 = (struct test *) mem_cache_alloc(cache);
-        cout << endl << obj1->i << obj1->s << endl;
 
-
-        struct mem_cache * cacheL = mem_cache_create( "lcache", sizeof(struct testL), 5, 0, &ctrL, NULL);
-        struct testL * obj2 = (struct testL *) mem_cache_alloc(cacheL);
-        cout << obj2->i << endl;
-
-        for (int i = 0; i < 1024; i ++ ) {
-           cout << obj2->s[i];
-        }
-        cout << endl;
-        cout << cache->slabs->refcount;
-        mem_cache_free (cache, obj1);
-        cout << cache->slabs->refcount;
-
-        */
     clock_t begin_time = clock();
 
     {
-        cout << "Slab allocation vs Malloc: Test1: allocating smallobjs. \nSize of smallobjs = " << sizeof(struct smallobjs) << " Bytes"
+        cout << "Slab allocation vs Malloc: Test1: allocating then freeing smallobjs. \nSize of smallobjs = " << sizeof(struct smallobjs) << " Bytes"
              << "\nAllocations = 7" << endl;
         struct mem_cache * cachesmall = mem_cache_create( "small", sizeof(struct smallobjs), 0, 0, &ctrsmallobj, NULL);
 
@@ -700,6 +684,7 @@ int main() {
         struct smallobjs * x[8];
         for(int i = 0 ; i < 7 ; i++) {
             x[i] = (struct smallobjs * ) malloc(sizeof( struct smallobjs) );
+            (*ctrsmallobj)(x[i], sizeof(struct smallobjs) );
 
         }
         std::cout << "Malloc allocation time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
@@ -716,6 +701,8 @@ int main() {
             delete x[i];
         }
         std::cout << "Malloc freeing time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
+        mem_cache_destroy(cachesmall);
+
     }
     cout << "Press any key to continue" << endl;
     int input;
@@ -723,45 +710,72 @@ int main() {
     cout << endl << endl << endl << endl;
 
     {
-        cout << "Slab allocation vs Malloc: Test2: allocating smallobjs. \nSize of smallobjs = " << sizeof(struct smallobjs) << " Bytes"
-             << "\nAllocations = 7" << endl;
+        cout << "Slab allocation vs Malloc: Test2: allocating and deallocating smallobjs many times. \nSize of smallobjs = " << sizeof(struct smallobjs) << " Bytes"
+             << "\nDe/Allocations = 10,000" << endl;
         struct mem_cache * cachesmall = mem_cache_create( "small", sizeof(struct smallobjs), 0, 0, &ctrsmallobj, NULL);
 
 
         struct smallobjs * objs_small[7];
-        for(int i = 0 ; i < 7 ; i++) {
-            objs_small[i] = (struct smallobjs *) mem_cache_alloc(cachesmall);
+        begin_time = clock();
+        for(int i = 0 ; i < 1000000/7 ; i++) {
+            for (int j = 0; j < 7; j++) {
+                objs_small[j] = (struct smallobjs *) mem_cache_alloc(cachesmall);
+            }
+            for (int j = 0; j < 7; j++) {
+                mem_cache_free( cachesmall, objs_small[j]);
+            }
+
         }
-        std::cout << "Slab allocation time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
-        /*
-        cout << "Just to demonstrate, here is the 4th slab allocated small object" << endl;
-        for (int i = 0; i < 1024; i ++ ) {
-           cout << objs_small[3]->ch[i];
-        }
-        cout << endl;*/
+        std::cout << "Slab De/allocation time for 10000 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
 
         begin_time = clock();
         struct smallobjs * x[8];
-        for(int i = 0 ; i < 7 ; i++) {
+        for(int i = 0 ; i < 1000000/7 ; i++) {
+            for (int j = 0; j < 7; j++) {
+                x[j] = (struct smallobjs * ) malloc(sizeof( struct smallobjs) );
+                (*ctrsmallobj)(x[j], sizeof(struct smallobjs) );
+            }
+            for (int j = 0; j < 7; j++) {
+                free( x[j] );
+            }
+
+        }
+        std::cout << "Malloc De/allocation time for 10000 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
+        mem_cache_destroy(cachesmall);
+
+    }
+    {
+        cout << "Slab allocation vs Malloc: Test2: allocating and deallocating smallobjs many times. \nSize of smallobjs = " << sizeof(struct smallobjs) << " Bytes"
+             << "\nDe/Allocations = 10,000" << endl;
+        struct mem_cache * cachesmall = mem_cache_create( "small", sizeof(struct smallobjs), 0, 0, &ctrsmallobj, NULL);
+
+
+        struct smallobjs * objs_small[100000];
+        begin_time = clock();
+        for(int i = 0 ; i < 100000 ; i++) {
+
+            objs_small[i] = (struct smallobjs *) mem_cache_alloc(cachesmall);
+
+            mem_cache_free( cachesmall, objs_small[i]);
+
+
+        }
+        std::cout << "Slab De/allocation time for 10000 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
+
+        begin_time = clock();
+        struct smallobjs * x[100000];
+        for(int i = 0 ; i < 100000 ; i++) {
+
             x[i] = (struct smallobjs * ) malloc(sizeof( struct smallobjs) );
 
+            (*ctrsmallobj)(x[i], sizeof(struct smallobjs) );
+
+            free( x[i]);
+
+
         }
-        std::cout << "Malloc allocation time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
-
-        begin_time = clock();
-        for(int i = 0 ; i < 7 ; i++) {
-            mem_cache_free( cachesmall, objs_small[i]);
-        }
-
-        std::cout << "Slab freeing time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
-
-        begin_time = clock();
-        for(int i = 0 ; i < 7 ; i++) {
-            delete x[i];
-        }
-        std::cout << "Malloc freeing time for 7 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
-
-
+        std::cout << "Malloc De/allocation time for 10000 small objs: " << float( clock () - begin_time ) /  CLOCKS_PER_SEC * 1000 << endl;
+        mem_cache_destroy(cachesmall);
 
     }
 
